@@ -50,12 +50,12 @@ public class UpdateStackBean extends AbstractDescribableImpl<UpdateStackBean> {
 
     private Region awsRegion;
 
-    private boolean terminateEC2Resources;
+    private boolean terminateAutoScaleEC2Resources;
 
 	@DataBoundConstructor
 	public UpdateStackBean(String stackName,
                            String parameters, long timeout,
-                           String awsAccessKey, String awsSecretKey, Region awsRegion, boolean terminateEC2Resources) {
+                           String awsAccessKey, String awsSecretKey, Region awsRegion, boolean terminateAutoScaleEC2Resources) {
 		super();
 		this.stackName = stackName;
 		this.parameters = parameters;
@@ -63,7 +63,7 @@ public class UpdateStackBean extends AbstractDescribableImpl<UpdateStackBean> {
 		this.awsAccessKey = awsAccessKey;
 		this.awsSecretKey = awsSecretKey;
         this.awsRegion = awsRegion;
-        this.terminateEC2Resources = terminateEC2Resources;
+        this.terminateAutoScaleEC2Resources = terminateAutoScaleEC2Resources;
 	}
 
 	public String getStackName() {
@@ -90,8 +90,8 @@ public class UpdateStackBean extends AbstractDescribableImpl<UpdateStackBean> {
     	return awsRegion;
     }
 
-    public boolean getTerminateEC2Resources() {
-        return terminateEC2Resources;
+    public boolean getTerminateAutoScaleEC2Resources() {
+        return terminateAutoScaleEC2Resources;
     }
 
     public Map<String, String> getParsedParameters(EnvVars env) {

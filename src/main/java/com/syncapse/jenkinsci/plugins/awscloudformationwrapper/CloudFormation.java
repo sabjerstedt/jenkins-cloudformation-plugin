@@ -38,10 +38,11 @@ public class CloudFormation {
 	private String awsSecretKey;
 	private PrintStream logger;
 	private AmazonCloudFormation amazonClient;
+    private EC2 ec2;
 	private Stack stack;
 	private long waitBetweenAttempts;
     private boolean autoDeleteStack;
-    private boolean terminateEC2Resources;
+    private boolean terminateAutoScaleEC2Resources;
 	private EnvVars envVars;
 	private Region awsRegion;
 
@@ -78,7 +79,8 @@ public class CloudFormation {
 		this.amazonClient = getAWSClient();
         this.autoDeleteStack = autoDeleteStack;
 		this.envVars = envVars;
-        this.terminateEC2Resources = terminateEC2Resources;
+        this.terminateAutoScaleEC2Resources = terminateEC2Resources;
+        this.ec2 = new EC2(awsAccessKey, awsSecretKey, awsRegion, logger);
 	}
 
 	public CloudFormation(PrintStream logger, String stackName,
@@ -110,8 +112,8 @@ public class CloudFormation {
     /**
      * Return true if it is desired to terminate EC2 resources automatically after stack update
      */
-    public boolean getTerminateEC2Resources() {
-        return terminateEC2Resources;
+    public boolean getTerminateAutoScaleEC2Resources() {
+        return terminateAutoScaleEC2Resources;
     }
 	
 	/**
@@ -220,6 +222,28 @@ public class CloudFormation {
             return false;
         } catch (AmazonClientException e) {
             logger.println("Failed to update stack: " + getExpandedStackName() + ". Error was: " + e.getCause());
+            return false;
+        }
+    }
+
+    public boolean doTerminateAutoScaleEC2Resources() {
+        try {
+            logger.println("Attempting to terminate EC2 instances in any auto-scaling groups associated with stack " + getExpandedStackName());
+            ListStackResourcesResult resources = amazonClient.listStackResources(new ListStackResourcesRequest().withStackName(getExpandedStackName()));
+
+            for (StackResourceSummary resource : resources.getStackResourceSummaries()) {
+                if (resource.getResourceType().equals("AWS::EC2::Instance")) {
+                    logger.println("Skipping shut down of individual EC2 instance " + resource.toString());
+                    //ec2.stopInstance(resource.getLogicalResourceId());
+                } else if (resource.getResourceType().equals("AWS::AutoScaling::AutoScalingGroup")) {
+                    logger.println("Shutting down EC2 instances in auto scaling group " + resource.toString());
+                    ec2.stopInstancesInScalingGroup(resource.getPhysicalResourceId());
+                }
+            }
+
+            return true;
+        } catch (AmazonServiceException e) {
+            logger.println("Amazon service exception thrown while trying to shut down EC2 instances, build will be unstable. Exception: "+e);
             return false;
         }
     }
@@ -411,10 +435,11 @@ public class CloudFormation {
             boolean updated = false;
 
             for (Parameter updatedParam : parameters) {
-                if (updatedParam.getParameterKey().equals(existingParam.getParameterKey()))  {
+                if (updatedParam.getParameterKey().equals(existingParam.getParameterKey()) && !updatedParam.getParameterValue().equals(existingParam.getParameterValue()))  {
                     updatedParam.setUsePreviousValue(false);
                     updateRequestParams.add(updatedParam);
                     updated = true;
+                    logger.println("Updating template parameter '"+updatedParam.getParameterKey()+"' from '"+existingParam.getParameterValue()+"' to '"+updatedParam.getParameterValue()+"'");
                     break;
                 }
             }
@@ -434,6 +459,7 @@ public class CloudFormation {
             }
 
             if (newParam) {
+                logger.println("Adding new template parameter "+updateParam.getParameterKey()+"='"+updateParam.getParameterValue()+"'");
                 updateRequestParams.add(updateParam);
             }
         }

@@ -17,7 +17,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -64,6 +63,11 @@ public class CloudFormationUpdateBuildWrapper extends BuildWrapper {
 				if (cloudFormation.update()) {
 					cloudFormations.add(cloudFormation);
 					env.putAll(cloudFormation.getOutputs());
+                    if (cloudFormation.getTerminateAutoScaleEC2Resources()) {
+                        if (!cloudFormation.doTerminateAutoScaleEC2Resources()) {
+                            build.setResult(Result.UNSTABLE);
+                        }
+                    }
 				} else {
 					build.setResult(Result.FAILURE);
 					break;
@@ -94,7 +98,7 @@ public class CloudFormationUpdateBuildWrapper extends BuildWrapper {
 		return new CloudFormation(logger, stackBean.getStackName(), null, stackBean.getParsedParameters(env),
 				stackBean.getTimeout(), stackBean.getParsedAwsAccessKey(env),
 				stackBean.getParsedAwsSecretKey(env),
-				stackBean.getAwsRegion(), false, env, stackBean.getTerminateEC2Resources());
+				stackBean.getAwsRegion(), false, env, stackBean.getTerminateAutoScaleEC2Resources());
 
 	}
 

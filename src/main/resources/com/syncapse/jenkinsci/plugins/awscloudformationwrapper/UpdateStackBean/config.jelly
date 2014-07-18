@@ -20,8 +20,8 @@
 		<f:entry title="AWS Secret Key" field="awsSecretKey">
 			<f:textbox />
 		</f:entry>
-		<f:entry title="Automatically terminate EC2 instances for this stack after update"
-			field="terminateEC2Resources">
+		<f:entry title="Automatically terminate EC2 instances in auto-scaling groups for this stack after update"
+			field="terminateAutoScaleEC2Resources">
 			<f:checkbox default="false" />
 		</f:entry>
 		<f:entry>
