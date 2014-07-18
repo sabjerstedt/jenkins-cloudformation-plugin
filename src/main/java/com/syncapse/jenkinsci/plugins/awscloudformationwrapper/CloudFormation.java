@@ -4,10 +4,7 @@
 package com.syncapse.jenkinsci.plugins.awscloudformationwrapper;
 
 import java.io.PrintStream;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
@@ -15,17 +12,8 @@ import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.cloudformation.AmazonCloudFormation;
 import com.amazonaws.services.cloudformation.AmazonCloudFormationAsyncClient;
-import com.amazonaws.services.cloudformation.model.CreateStackRequest;
-import com.amazonaws.services.cloudformation.model.DeleteStackRequest;
-import com.amazonaws.services.cloudformation.model.DescribeStackEventsRequest;
-import com.amazonaws.services.cloudformation.model.DescribeStackEventsResult;
-import com.amazonaws.services.cloudformation.model.DescribeStacksRequest;
-import com.amazonaws.services.cloudformation.model.DescribeStacksResult;
-import com.amazonaws.services.cloudformation.model.Output;
-import com.amazonaws.services.cloudformation.model.Parameter;
+import com.amazonaws.services.cloudformation.model.*;
 import com.amazonaws.services.cloudformation.model.Stack;
-import com.amazonaws.services.cloudformation.model.StackEvent;
-import com.amazonaws.services.cloudformation.model.StackStatus;
 import com.google.common.collect.Lists;
 import hudson.EnvVars;
 
@@ -53,6 +41,7 @@ public class CloudFormation {
 	private Stack stack;
 	private long waitBetweenAttempts;
     private boolean autoDeleteStack;
+    private boolean terminateEC2Resources;
 	private EnvVars envVars;
 	private Region awsRegion;
 
@@ -70,7 +59,7 @@ public class CloudFormation {
 	public CloudFormation(PrintStream logger, String stackName,
 			String recipeBody, Map<String, String> parameters,
 			long timeout, String awsAccessKey, String awsSecretKey, Region region, 
-            boolean autoDeleteStack, EnvVars envVars) {
+            boolean autoDeleteStack, EnvVars envVars, boolean terminateEC2Resources) {
 
 		this.logger = logger;
 		this.stackName = stackName;
@@ -89,6 +78,7 @@ public class CloudFormation {
 		this.amazonClient = getAWSClient();
         this.autoDeleteStack = autoDeleteStack;
 		this.envVars = envVars;
+        this.terminateEC2Resources = terminateEC2Resources;
 	}
 
 	public CloudFormation(PrintStream logger, String stackName,
@@ -96,8 +86,16 @@ public class CloudFormation {
 			String awsAccessKey, String awsSecretKey, boolean autoDeleteStack,
 			EnvVars envVars) {
 		this(logger, stackName, recipeBody, parameters, timeout, awsAccessKey,
-				awsSecretKey, null, autoDeleteStack, envVars);
+				awsSecretKey, null, autoDeleteStack, envVars, false);
 	}
+
+    public CloudFormation(PrintStream logger, String stackName,
+                          Map<String, String> parameters, long timeout,
+                          String awsAccessKey, String awsSecretKey, boolean terminateEC2Resources,
+                          EnvVars envVars) {
+        this(logger, stackName, null, parameters, timeout, awsAccessKey,
+                awsSecretKey, null, false, envVars, terminateEC2Resources);
+    }
 
 	/**
      * Return true if this stack should be automatically deleted at the end of the job, or false if it should not
@@ -107,6 +105,13 @@ public class CloudFormation {
      */
     public boolean getAutoDeleteStack() {
         return autoDeleteStack;
+    }
+
+    /**
+     * Return true if it is desired to terminate EC2 resources automatically after stack update
+     */
+    public boolean getTerminateEC2Resources() {
+        return terminateEC2Resources;
     }
 	
 	/**
@@ -130,8 +135,7 @@ public class CloudFormation {
 	 * @return True of the stack was created successfully. False otherwise.
 	 * 
 	 * @throws TimeoutException if creating the stack takes longer than the timeout value passed during creation.
-	 * 
-	 * @see CloudFormation#CloudFormation(PrintStream, String, String, Map, long, String, String)
+	 *
 	 */
 	public boolean create() throws TimeoutException {
 
@@ -170,8 +174,57 @@ public class CloudFormation {
 		}
 
 	}
-	
-	private String detailedError(AmazonServiceException e){
+
+    /**
+     * @return True of the stack was updated successfully. False otherwise.
+     *
+     * Currently this only supports updating existing stack parameters, not templates (will always use previous template)
+     *
+     * @throws TimeoutException if creating the stack takes longer than the timeout value passed during creation.
+     *
+     */
+    public boolean update() throws TimeoutException {
+        logger.println("Updating cloud formation stack: " + getExpandedStackName());
+
+        try {
+            UpdateStackRequest request = createUpdateStackRequest();
+
+            amazonClient.updateStack(request);
+
+            stack = waitForStackToBeUpdated();
+
+            StackStatus status = getStackStatus(stack.getStackStatus());
+
+            Map<String, String> stackOutput = new HashMap<String, String>();
+            if (isStackUpdateSuccessful(status)) {
+                List<Output> outputs = stack.getOutputs();
+                for (Output output : outputs) {
+                    stackOutput.put(output.getOutputKey(), output.getOutputValue());
+                }
+
+                logger.println("Successfully updated stack: " + getExpandedStackName());
+
+                this.outputs = stackOutput;
+                return true;
+            } else {
+                logger.println("Failed to update stack: " + getExpandedStackName() + ". Reason: " + stack.getStackStatusReason());
+                return false;
+            }
+        } catch (AmazonServiceException e) {
+            if (e.getMessage().contains("No updates are to be performed")) {
+                logger.println("The stack "+getExpandedStackName()+" in AWS already matches the updated parameters, no updates are needed");
+                return true;
+            }
+
+            logger.println("Failed to update stack: " + getExpandedStackName() + ". Reason: " + detailedError(e));
+            return false;
+        } catch (AmazonClientException e) {
+            logger.println("Failed to update stack: " + getExpandedStackName() + ". Error was: " + e.getCause());
+            return false;
+        }
+    }
+
+    private String detailedError(AmazonServiceException e){
 		StringBuffer message = new StringBuffer();
 		message.append("Detailed Message: ").append(e.getMessage()).append('\n');
 		message.append("Status Code: ").append(e.getStatusCode()).append('\n');
@@ -246,6 +299,25 @@ public class CloudFormation {
 		return stack;
 	}
 
+    private Stack waitForStackToBeUpdated() {
+        DescribeStacksRequest describeStacksRequest = new DescribeStacksRequest().withStackName(getExpandedStackName());
+        StackStatus status = StackStatus.UPDATE_IN_PROGRESS;
+        Stack stack = null;
+        long startTime = System.currentTimeMillis();
+        while ( isStackUpdateInProgress(status) ){
+            if (isTimeout(startTime)){
+                throw new TimeoutException("Timed out waiting for stack to be updated. (timeout=" + timeout + ")");
+            }
+            stack = getStack(amazonClient.describeStacks(describeStacksRequest));
+            status = getStackStatus(stack.getStackStatus());
+            if (isStackUpdateInProgress(status)) sleep();
+        }
+
+        printStackEvents();
+
+        return stack;
+    }
+
 	private void printStackEvents() {
 		DescribeStackEventsRequest r = new DescribeStackEventsRequest();
 		r.withStackName(getExpandedStackName());
@@ -278,6 +350,10 @@ public class CloudFormation {
 		return status == StackStatus.CREATE_COMPLETE;
 	}
 
+    private boolean isStackUpdateSuccessful(StackStatus status) {
+        return status == StackStatus.UPDATE_COMPLETE;
+    }
+
 	private void sleep() {
 		try {
 			Thread.sleep(waitBetweenAttempts * 1000);
@@ -292,6 +368,10 @@ public class CloudFormation {
 	private boolean isStackCreationInProgress(StackStatus status) {
 		return status == StackStatus.CREATE_IN_PROGRESS;
 	}
+
+    private boolean isStackUpdateInProgress(StackStatus status) {
+        return status == StackStatus.UPDATE_IN_PROGRESS;
+    }
 
 	private StackStatus getStackStatus(String status) {
 		StackStatus result = StackStatus.fromValue(status);
@@ -309,7 +389,59 @@ public class CloudFormation {
 		return r;
 	}
 
-	public Map<String, String> getOutputs() {
+    private UpdateStackRequest createUpdateStackRequest() {
+        UpdateStackRequest r = new UpdateStackRequest();
+        r.withStackName(getExpandedStackName());
+        r.withParameters(getUpdateParameters());
+        r.withCapabilities("CAPABILITY_IAM");
+        r.withUsePreviousTemplate(true);
+
+        return r;
+    }
+
+    private List<Parameter> getUpdateParameters() {
+        List<Parameter> updateRequestParams = new ArrayList<Parameter>();
+
+        DescribeStacksRequest describeStacksRequest = new DescribeStacksRequest().withStackName(getExpandedStackName());
+        Stack existingStack = getStack(amazonClient.describeStacks(describeStacksRequest));
+        List<Parameter> existingParams = existingStack.getParameters();
+
+        //Scroll through existing parameters, update if needed, otherwise set UsePreviousValue flag
+        for (Parameter existingParam : existingParams) {
+            boolean updated = false;
+
+            for (Parameter updatedParam : parameters) {
+                if (updatedParam.getParameterKey().equals(existingParam.getParameterKey()))  {
+                    updatedParam.setUsePreviousValue(false);
+                    updateRequestParams.add(updatedParam);
+                    updated = true;
+                    break;
+                }
+            }
+
+            if (!updated) {
+                updateRequestParams.add(new Parameter().withParameterKey(existingParam.getParameterKey()).withUsePreviousValue(true));
+            }
+        }
+
+        //Go through updated parameters, check for any new parameters and add them
+        for (Parameter updateParam : parameters) {
+            boolean newParam = true;
+
+            for (Parameter paramToUpdate : updateRequestParams) {
+                if (paramToUpdate.getParameterKey().equals(updateParam.getParameterKey()))
+                    newParam = false;
+            }
+
+            if (newParam) {
+                updateRequestParams.add(updateParam);
+            }
+        }
+
+        return updateRequestParams;
+    }
+
+    public Map<String, String> getOutputs() {
 		// Prefix outputs with stack name to prevent collisions with other stacks created in the same build.
 		HashMap<String, String> map = new HashMap<String, String>();
 		for (String key : outputs.keySet()) {

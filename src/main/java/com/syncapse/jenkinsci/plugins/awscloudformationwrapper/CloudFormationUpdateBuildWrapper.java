@@ -6,12 +6,13 @@ package com.syncapse.jenkinsci.plugins.awscloudformationwrapper;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
-import hudson.model.BuildListener;
-import hudson.model.Result;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
+import hudson.model.BuildListener;
+import hudson.model.Result;
 import hudson.tasks.BuildWrapper;
 import hudson.tasks.BuildWrapperDescriptor;
+import org.kohsuke.stapler.DataBoundConstructor;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -20,20 +21,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.kohsuke.stapler.DataBoundConstructor;
-
 /**
  * @author erickdovale
  * 
  */
-public class CloudFormationBuildWrapper extends BuildWrapper {
+public class CloudFormationUpdateBuildWrapper extends BuildWrapper {
 
-	protected List<StackBean> stacks;
+	protected List<UpdateStackBean> stacks;
 
 	private transient List<CloudFormation> cloudFormations = new ArrayList<CloudFormation>();
 
 	@DataBoundConstructor
-	public CloudFormationBuildWrapper(List<StackBean> stacks) {
+	public CloudFormationUpdateBuildWrapper(List<UpdateStackBean> stacks) {
 		this.stacks = stacks;
 	}
 
@@ -56,77 +55,46 @@ public class CloudFormationBuildWrapper extends BuildWrapper {
         
         boolean success = true;
         
-		for (StackBean stackBean : stacks) {
+		for (UpdateStackBean stackBean : stacks) {
 
 			final CloudFormation cloudFormation = newCloudFormation(stackBean,
 					build, env, listener.getLogger());
 
 			try {
-				if (cloudFormation.create()) {
+				if (cloudFormation.update()) {
 					cloudFormations.add(cloudFormation);
 					env.putAll(cloudFormation.getOutputs());
 				} else {
 					build.setResult(Result.FAILURE);
-					success = false;
 					break;
 				}
 			} catch (TimeoutException e) {
 				listener.getLogger()
-						.append("ERROR creating stack with name "
+						.append("ERROR updating stack with name "
 								+ stackBean.getStackName()
-								+ ". Operation timedout. Try increasing the timeout period in your stack configuration.");
+								+ ". Operation timed out. Try increasing the timeout period in your stack configuration.");
 				build.setResult(Result.FAILURE);
-				success = false;
 				break;
 			}
 
 		}
-		
-		// If any stack fails to create then destroy them all
-		if (!success) {
-			doTearDown();
-			return null;
-		}
 
 		return new Environment() {
-			@Override
-			public boolean tearDown(AbstractBuild build, BuildListener listener)
-					throws IOException, InterruptedException {
-
-				return doTearDown();
-				
-			}
-
-		};
-	}
-	
-	protected boolean doTearDown() throws IOException, InterruptedException{
-		boolean result = true;
-
-		List<CloudFormation> reverseOrder = new ArrayList<CloudFormation>(cloudFormations);
-		Collections.reverse(reverseOrder);
-
-		for (CloudFormation cf : reverseOrder) {
-            // automatically delete the stack?
-            if (cf.getAutoDeleteStack()) {
-                // delete the stack
-                result = result && cf.delete();
+            @Override
+            public boolean tearDown(AbstractBuild build, BuildListener listener) throws IOException, InterruptedException {
+                return true;
             }
-		}
-
-		return result;
+        };
 	}
 
-	protected CloudFormation newCloudFormation(StackBean stackBean,
+	protected CloudFormation newCloudFormation(UpdateStackBean stackBean,
 			AbstractBuild<?, ?> build, EnvVars env, PrintStream logger)
 			throws IOException {
 
-		return new CloudFormation(logger, stackBean.getStackName(), build
-				.getWorkspace().child(stackBean.getCloudFormationRecipe())
-				.readToString(), stackBean.getParsedParameters(env),
+		return new CloudFormation(logger, stackBean.getStackName(), null, stackBean.getParsedParameters(env),
 				stackBean.getTimeout(), stackBean.getParsedAwsAccessKey(env),
 				stackBean.getParsedAwsSecretKey(env),
-				stackBean.getAwsRegion(), stackBean.getAutoDeleteStack(), env, false);
+				stackBean.getAwsRegion(), false, env, stackBean.getTerminateEC2Resources());
 
 	}
 
@@ -135,7 +103,7 @@ public class CloudFormationBuildWrapper extends BuildWrapper {
 
 		@Override
 		public String getDisplayName() {
-			return "Create AWS Cloud Formation stack";
+			return "Update AWS Cloud Formation stack";
 		}
 
 		@Override
@@ -145,7 +113,7 @@ public class CloudFormationBuildWrapper extends BuildWrapper {
 		
 	}
 
-	public List<StackBean> getStacks() {
+	public List<UpdateStackBean> getStacks() {
 		return stacks;
 	}
 
