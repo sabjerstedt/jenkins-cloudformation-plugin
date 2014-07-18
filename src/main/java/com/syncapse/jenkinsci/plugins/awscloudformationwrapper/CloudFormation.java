@@ -474,6 +474,10 @@ public class CloudFormation {
     public Map<String, String> getOutputs() {
 		// Prefix outputs with stack name to prevent collisions with other stacks created in the same build.
 		HashMap<String, String> map = new HashMap<String, String>();
+
+        if (outputs == null)
+            return map;
+
 		for (String key : outputs.keySet()) {
 			map.put(getExpandedStackName() + "_" + key, outputs.get(key));
 		}
