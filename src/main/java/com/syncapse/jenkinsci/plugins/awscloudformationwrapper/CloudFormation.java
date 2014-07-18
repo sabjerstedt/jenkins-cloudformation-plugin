@@ -80,10 +80,10 @@ public class CloudFormation {
         this.autoDeleteStack = autoDeleteStack;
 		this.envVars = envVars;
         this.terminateAutoScaleEC2Resources = terminateEC2Resources;
-        this.ec2 = new EC2(awsAccessKey, awsSecretKey, awsRegion, logger);
+        this.ec2 = getEC2Client();
 	}
 
-	public CloudFormation(PrintStream logger, String stackName,
+    public CloudFormation(PrintStream logger, String stackName,
 			String recipeBody, Map<String, String> parameters, long timeout,
 			String awsAccessKey, String awsSecretKey, boolean autoDeleteStack,
 			EnvVars envVars) {
@@ -264,6 +264,10 @@ public class CloudFormation {
 		amazonClient.setEndpoint(awsRegion.endPoint);
 		return amazonClient;
 	}
+
+    protected EC2 getEC2Client() {
+        return new EC2(awsAccessKey, awsSecretKey, awsRegion, logger);
+    }
 	
 	private boolean waitForStackToBeDeleted() {
 		
@@ -479,4 +483,8 @@ public class CloudFormation {
 	private String getExpandedStackName() {
 		return envVars.expand(stackName);
 	}
+
+    public void setTimeout(long timeout) {
+        this.timeout = timeout;
+    }
 }
