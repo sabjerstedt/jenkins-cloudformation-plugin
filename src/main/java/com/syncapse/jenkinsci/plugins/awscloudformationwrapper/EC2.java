@@ -47,20 +47,18 @@ public class EC2 {
             logger.println("Waiting for EC2 instances to fully terminate");
             boolean terminated = false;
             long startTime = System.currentTimeMillis();
+            int count = 0;
 
             while (!terminated) {
+                count++;
+
+                if (count % 10 == 0) {
+                    logger.println("Still waiting for instances to terminate (instances: "+instanceIds+")");
+                }
+
                 if (isTimeout(startTime)) {
                     logger.println("Timed out waiting for EC2 instances to terminate");
                     throw new TimeoutException("Timed out waiting for EC2 instances to terminate");
-                }
-
-                terminated = true;
-                DescribeInstanceStatusResult statuses = ec2Client.describeInstanceStatus(new DescribeInstanceStatusRequest().withInstanceIds(instanceIds));
-                for (InstanceStatus status : statuses.getInstanceStatuses()) {
-                    if (!status.getInstanceState().getName().equals(InstanceStateName.Terminated)) {
-                        terminated = false;
-                        break;
-                    }
                 }
 
                 try {
@@ -68,6 +66,16 @@ public class EC2 {
                 } catch (InterruptedException ex) {
                     logger.println("Received interrupted exception while waiting for EC2 instances to terminate, will no longer wait..");
                     break;
+                }
+
+                terminated = true;
+                DescribeInstancesResult instanceInfo = ec2Client.describeInstances(new DescribeInstancesRequest().withInstanceIds(instanceIds));
+
+                for (Reservation reservation : instanceInfo.getReservations()) {
+                    for (com.amazonaws.services.ec2.model.Instance instance : reservation.getInstances()) {
+                        if (!instance.getState().getName().equals(InstanceStateName.Terminated.toString()))
+                            terminated = false;
+                    }
                 }
             }
         }
@@ -95,8 +103,15 @@ public class EC2 {
             logger.println("Waiting for EC2 instances in auto-scaling group "+autoScalingGroupName+" to restart");
             boolean instancesRestarted = false;
             long startTime = System.currentTimeMillis();
+            int waitCount = 0;
 
             while (!instancesRestarted) {
+                waitCount++;
+
+                if (waitCount % 10 == 0) {
+                    logger.println("Still waiting for auto-scaling group "+autoScalingGroupName+" to become healthy..");
+                }
+
                 if (isTimeout(startTime)) {
                     logger.println("Timed out waiting for EC2 instances to restart");
                     throw new TimeoutException("Timed out waiting for EC2 instances to restart");
@@ -106,7 +121,7 @@ public class EC2 {
                 int count = 0;
 
                 for (Instance instance : groupInfo.getAutoScalingGroups().get(0).getInstances()) {
-                    if (instance.getHealthStatus().equals("Healthy"))
+                    if (instance.getHealthStatus().equals("Healthy") && !instancesToTerminate.contains(instance.getInstanceId()))
                         count++;
                 }
 
