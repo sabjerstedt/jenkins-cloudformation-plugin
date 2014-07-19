@@ -72,7 +72,7 @@ public class CloudFormationNotifier extends Notifier {
 					stack.getParsedAwsSecretKey(envVars),
 					stack.getAwsRegion(),
 					false,
-					envVars, false
+					envVars, false, false
 			);
 			if(cloudFormation.delete()) {
 				LOGGER.info("Success");

@@ -50,12 +50,21 @@ public class UpdateStackBean extends AbstractDescribableImpl<UpdateStackBean> {
 
     private Region awsRegion;
 
+    /**
+     * Flag on whether to terminate EC2 instances in cloud formation template auto-scaling groups
+     */
     private boolean terminateAutoScaleEC2Resources;
 
-	@DataBoundConstructor
+    /**
+     * Flag on whether to wait for EC2 instances in auto-scaling group to restart before finishing
+     * This flag is not used if terminateAutoScaleEC2Resources is false
+     */
+    private boolean waitForInstancesToRestart;
+
+    @DataBoundConstructor
 	public UpdateStackBean(String stackName,
                            String parameters, long timeout,
-                           String awsAccessKey, String awsSecretKey, Region awsRegion, boolean terminateAutoScaleEC2Resources) {
+                           String awsAccessKey, String awsSecretKey, Region awsRegion, boolean terminateAutoScaleEC2Resources, boolean waitForInstancesToRestart) {
 		super();
 		this.stackName = stackName;
 		this.parameters = parameters;
@@ -64,6 +73,7 @@ public class UpdateStackBean extends AbstractDescribableImpl<UpdateStackBean> {
 		this.awsSecretKey = awsSecretKey;
         this.awsRegion = awsRegion;
         this.terminateAutoScaleEC2Resources = terminateAutoScaleEC2Resources;
+        this.waitForInstancesToRestart = waitForInstancesToRestart;
 	}
 
 	public String getStackName() {
@@ -94,11 +104,18 @@ public class UpdateStackBean extends AbstractDescribableImpl<UpdateStackBean> {
         return terminateAutoScaleEC2Resources;
     }
 
+    public boolean getWaitForInstancesToRestart() {
+        return waitForInstancesToRestart;
+    }
+
     public Map<String, String> getParsedParameters(EnvVars env) {
 		
 		if (parameters == null || parameters.isEmpty())
 			return new HashMap<String, String>();
-		
+
+        parameters = parameters.replace("\n", "");
+        parameters = parameters.replace("\r", "");
+
 		Map<String, String> result = new HashMap<String, String>();
 		String token[] = null;
 		
@@ -127,7 +144,7 @@ public class UpdateStackBean extends AbstractDescribableImpl<UpdateStackBean> {
 		return env.expand(getAwsSecretKey());
 	}
 
-	@Extension
+    @Extension
 	public static final class DescriptorImpl extends Descriptor<UpdateStackBean>{
 		
 		@Override

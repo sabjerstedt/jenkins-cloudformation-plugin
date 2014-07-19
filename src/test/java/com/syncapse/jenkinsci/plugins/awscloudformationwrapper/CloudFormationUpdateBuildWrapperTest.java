@@ -85,8 +85,8 @@ public class CloudFormationUpdateBuildWrapperTest {
 
     private void when_2_stack_are_entered() throws Exception {
 		List<UpdateStackBean> stackBeans = new ArrayList<UpdateStackBean>();
-		stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, false));
-		stackBeans.add(new UpdateStackBean("stack2", "{param2: 2}", 0, "accessKey", "secretKey", null, false));
+		stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, false, false));
+		stackBeans.add(new UpdateStackBean("stack2", "{param2: 2}", 0, "accessKey", "secretKey", null, false, false));
 
 		wrapper = spy(new CloudFormationUpdateBuildWrapper(stackBeans));
 		
@@ -125,7 +125,7 @@ public class CloudFormationUpdateBuildWrapperTest {
 
 	private void when_1_stack_is_entered() throws Exception {
 		List<UpdateStackBean> stackBeans = new ArrayList<UpdateStackBean>();
-        stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, false));
+        stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, false, false));
 
         wrapper = spy(new CloudFormationUpdateBuildWrapper(stackBeans));
 
@@ -139,7 +139,7 @@ public class CloudFormationUpdateBuildWrapperTest {
 
     private void when_1_stack_is_entered_failure() throws Exception {
         List<UpdateStackBean> stackBeans = new ArrayList<UpdateStackBean>();
-        stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, false));
+        stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, false, false));
 
         wrapper = spy(new CloudFormationUpdateBuildWrapper(stackBeans));
 
@@ -153,7 +153,7 @@ public class CloudFormationUpdateBuildWrapperTest {
 
     private void when_1_stack_is_entered_with_terminate_ec2() throws Exception {
         List<UpdateStackBean> stackBeans = new ArrayList<UpdateStackBean>();
-        stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, true));
+        stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, true, true));
 
         wrapper = spy(new CloudFormationUpdateBuildWrapper(stackBeans));
 
@@ -169,7 +169,7 @@ public class CloudFormationUpdateBuildWrapperTest {
 
     private void when_1_stack_is_entered_with_terminate_ec2_failure() throws Exception {
         List<UpdateStackBean> stackBeans = new ArrayList<UpdateStackBean>();
-        stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, true));
+        stackBeans.add(new UpdateStackBean("stack1", "{param1: 1}", 0, "accessKey", "secretKey", null, true, true));
 
         wrapper = spy(new CloudFormationUpdateBuildWrapper(stackBeans));
 

@@ -195,14 +195,14 @@ public class CloudFormationTest {
     public void terminate_autoscale_ec2_resources_none_found() {
         when(awsClient.listStackResources(any(ListStackResourcesRequest.class))).thenReturn(new ListStackResourcesResult().withStackResourceSummaries(Arrays.asList(new StackResourceSummary().withResourceType("Blah").withPhysicalResourceId("blah"))));
         boolean result = cf.doTerminateAutoScaleEC2Resources();
-        verify(ec2Client, times(0)).stopInstancesInScalingGroup(anyString());
+        verify(ec2Client, times(0)).stopInstancesInScalingGroup(anyString(), anyBoolean());
     }
 
     @Test
     public void terminate_autoscale_ec2_resources() {
         when(awsClient.listStackResources(any(ListStackResourcesRequest.class))).thenReturn(new ListStackResourcesResult().withStackResourceSummaries(Arrays.asList(new StackResourceSummary().withResourceType("AWS::AutoScaling::AutoScalingGroup").withPhysicalResourceId("someid"))));
         boolean result = cf.doTerminateAutoScaleEC2Resources();
-        verify(ec2Client, times(1)).stopInstancesInScalingGroup("someid");
+        verify(ec2Client, times(1)).stopInstancesInScalingGroup("someid", false);
     }
 
 	private DescribeStacksResult stackDeleteFailedResult() {

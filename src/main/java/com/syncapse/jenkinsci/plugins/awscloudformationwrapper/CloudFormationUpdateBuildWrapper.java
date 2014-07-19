@@ -98,7 +98,7 @@ public class CloudFormationUpdateBuildWrapper extends BuildWrapper {
 		return new CloudFormation(logger, stackBean.getStackName(), null, stackBean.getParsedParameters(env),
 				stackBean.getTimeout(), stackBean.getParsedAwsAccessKey(env),
 				stackBean.getParsedAwsSecretKey(env),
-				stackBean.getAwsRegion(), false, env, stackBean.getTerminateAutoScaleEC2Resources());
+				stackBean.getAwsRegion(), false, env, stackBean.getTerminateAutoScaleEC2Resources(), stackBean.getWaitForInstancesToRestart());
 
 	}
 

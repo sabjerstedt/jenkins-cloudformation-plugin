@@ -47,8 +47,9 @@ public class CloudFormation {
 	private Region awsRegion;
 
 	private Map<String, String> outputs;
+    private boolean waitForInstancesToRestart;
 
-	/**
+    /**
 	 * @param logger a logger to write progress information.
 	 * @param stackName the name of the stack as defined in the AWS CloudFormation API.
 	 * @param recipeBody the body of the json document describing the stack.
@@ -60,7 +61,7 @@ public class CloudFormation {
 	public CloudFormation(PrintStream logger, String stackName,
 			String recipeBody, Map<String, String> parameters,
 			long timeout, String awsAccessKey, String awsSecretKey, Region region, 
-            boolean autoDeleteStack, EnvVars envVars, boolean terminateEC2Resources) {
+            boolean autoDeleteStack, EnvVars envVars, boolean terminateEC2Resources, boolean waitForInstancesToRestart) {
 
 		this.logger = logger;
 		this.stackName = stackName;
@@ -80,6 +81,7 @@ public class CloudFormation {
         this.autoDeleteStack = autoDeleteStack;
 		this.envVars = envVars;
         this.terminateAutoScaleEC2Resources = terminateEC2Resources;
+        this.waitForInstancesToRestart = waitForInstancesToRestart;
         this.ec2 = getEC2Client();
 	}
 
@@ -88,15 +90,15 @@ public class CloudFormation {
 			String awsAccessKey, String awsSecretKey, boolean autoDeleteStack,
 			EnvVars envVars) {
 		this(logger, stackName, recipeBody, parameters, timeout, awsAccessKey,
-				awsSecretKey, null, autoDeleteStack, envVars, false);
+				awsSecretKey, null, autoDeleteStack, envVars, false, false);
 	}
 
     public CloudFormation(PrintStream logger, String stackName,
                           Map<String, String> parameters, long timeout,
-                          String awsAccessKey, String awsSecretKey, boolean terminateEC2Resources,
+                          String awsAccessKey, String awsSecretKey, boolean terminateEC2Resources, boolean waitForInstancesToRestart,
                           EnvVars envVars) {
         this(logger, stackName, null, parameters, timeout, awsAccessKey,
-                awsSecretKey, null, false, envVars, terminateEC2Resources);
+                awsSecretKey, null, false, envVars, terminateEC2Resources, waitForInstancesToRestart);
     }
 
 	/**
@@ -209,7 +211,7 @@ public class CloudFormation {
                 this.outputs = stackOutput;
                 return true;
             } else {
-                logger.println("Failed to update stack: " + getExpandedStackName() + ". Reason: " + stack.getStackStatusReason());
+                logger.println("Failed to update stack: " + getExpandedStackName() + ". Status: "+status+ " Reason: " + stack.getStackStatusReason());
                 return false;
             }
         } catch (AmazonServiceException e) {
@@ -237,7 +239,7 @@ public class CloudFormation {
                     //ec2.stopInstance(resource.getLogicalResourceId());
                 } else if (resource.getResourceType().equals("AWS::AutoScaling::AutoScalingGroup")) {
                     logger.println("Shutting down EC2 instances in auto scaling group " + resource.toString());
-                    ec2.stopInstancesInScalingGroup(resource.getPhysicalResourceId());
+                    ec2.stopInstancesInScalingGroup(resource.getPhysicalResourceId(), waitForInstancesToRestart);
                 }
             }
 
@@ -266,7 +268,7 @@ public class CloudFormation {
 	}
 
     protected EC2 getEC2Client() {
-        return new EC2(awsAccessKey, awsSecretKey, awsRegion, logger);
+        return new EC2(awsAccessKey, awsSecretKey, awsRegion, logger, timeout);
     }
 	
 	private boolean waitForStackToBeDeleted() {
@@ -398,7 +400,10 @@ public class CloudFormation {
 	}
 
     private boolean isStackUpdateInProgress(StackStatus status) {
-        return status == StackStatus.UPDATE_IN_PROGRESS;
+        return status == StackStatus.UPDATE_IN_PROGRESS ||
+               status == StackStatus.UPDATE_COMPLETE_CLEANUP_IN_PROGRESS ||
+               status == StackStatus.UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS ||
+               status == StackStatus.UPDATE_ROLLBACK_IN_PROGRESS;
     }
 
 	private StackStatus getStackStatus(String status) {
